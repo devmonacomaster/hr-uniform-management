@@ -1,126 +1,193 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-interface UserData {
+const PUBLIC_ROUTES = ['/', '/api', '/acesso-negado'];
+
+function isPublic(pathname: string) {
+    return PUBLIC_ROUTES.some((r) => pathname === r || pathname.startsWith(r + '/'));
+}
+function isLocalhost(hostname: string) {
+    return (
+        (process.env.IS_LOCALHOST || '').toLowerCase() === 'true' &&
+        (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.endsWith('.localhost'))
+    );
+}
+
+type UserData = {
     id: string;
     nome: string;
     avatar: string | null;
     departamento: string;
     cargo: string;
     empresa: string;
-    ativo: string | boolean;
+    ativo: string;
     permissoes: string[];
     rotas: string[];
-}
-
-interface ApiResponse {
-    error: boolean;
-    message: string;
-    results: UserData;
-}
+};
+type ApiResponse = { error: boolean; message: string; results?: UserData };
 
 async function fetchUserData(token: string): Promise<UserData | null> {
     try {
-        const response = await fetch(
-            'https://constellation-api.grupomonaco.com.br/sismonaco/api/me',
-            {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    Accept: 'application/json',
-                },
-                cache: 'no-store',
-            }
-        );
-
-        if (!response.ok) return null;
-
-        const data: ApiResponse = await response.json();
+        // Em dev você está usando backend local em HTTP; deixe como env ou caia no localhost
+        const base = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost/sismonaco';
+        console.log('[MW] /me → base:', base);
+        const r = await fetch(`${base}/api/me`, {
+            headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+            cache: 'no-store',
+        });
+        console.log('[MW] /me → status:', r.status);
+        if (!r.ok) return null;
+        const data = (await r.json()) as ApiResponse;
         if (data.error || !data.results) return null;
-
-        return data.results;
-    } catch {
+        return data.results!;
+    } catch (e) {
+        console.error('[MW] /me error:', e);
         return null;
     }
 }
 
-const PUBLIC_ROUTES = ['/login', '/acesso-negado', '/api'];
-
-function isPublic(pathname: string) {
-    if (pathname === '/login' || pathname === '/acesso-negado') return true;
-    return pathname === '/api' || pathname.startsWith('/api/');
-
-}
-
-function pathWithSlash(p: string) {
-    return p.endsWith('/') ? p : p + '/';
-}
-
 export async function middleware(request: NextRequest) {
-    const { nextUrl } = request;
-    const { pathname } = nextUrl;
+    const { pathname } = request.nextUrl;
+    const host = request.nextUrl.hostname;
+    const devMode = isLocalhost(host);
+    const devToken = process.env.DEV_BEARER_TOKEN || '';
 
-    // Capturei o token e transformei em um Cookie HTTP Only
-    const tokenFromQS = nextUrl.searchParams.get('token');
-    if (tokenFromQS) {
-        const cleanUrl = new URL(nextUrl.pathname, nextUrl.origin);
-        const res = NextResponse.redirect(cleanUrl);
+    console.log('[MW] pathname:', pathname, 'host:', host, 'devMode:', devMode);
 
-        res.cookies.set('token', tokenFromQS, {
+    // 1) Rotas públicas e /api internas passam direto
+    if (isPublic(pathname) || pathname.startsWith('/api/')) {
+        console.log('[MW] rota pública → next()');
+        return NextResponse.next();
+    }
+
+    // 2) Em localhost: SEMPRE usar DEV_BEARER_TOKEN
+    if (devMode) {
+        if (!devToken) {
+            console.warn('[MW] IS_LOCALHOST=true mas DEV_BEARER_TOKEN está vazio');
+            const res = NextResponse.next();
+            res.headers.set('x-auth-debug', 'dev_token_missing');
+            return res; // segue sem bloquear para você depurar
+        }
+
+        // Se o cookie atual é diferente do token de dev, grava e recarrega
+        const current = request.cookies.get('token')?.value;
+        if (current !== devToken) {
+            console.log('[MW] forçando DEV_BEARER_TOKEN no cookie e recarregando a rota');
+            const res = NextResponse.redirect(new URL(pathname, request.url));
+            res.cookies.set('token', devToken, {
+                httpOnly: true,
+                secure: false, // importante para HTTP em localhost
+                sameSite: 'lax',
+                path: '/',
+            });
+            return res;
+        }
+
+        // Valida com o devToken
+        console.log('[MW] usando DEV_BEARER_TOKEN para validar /me...');
+        const user = await fetchUserData(devToken);
+        if (!user || user.ativo !== 'True') {
+            console.log('[MW] /me falhou OU usuário inativo (dev)');
+            const res = NextResponse.next(); // não bloqueia em dev
+            res.headers.set('x-auth-debug', 'me_failed_or_inactive');
+            return res;
+        }
+
+        // Autorização por prefixo
+        const hasAccess = (user.rotas || []).some((route) => {
+            if (!route) return false;
+            const normalized = route.endsWith('/') ? route : route + '/';
+            return pathname === route || pathname.startsWith(normalized);
+        });
+        console.log('[MW] hasAccess:', hasAccess, 'rotas:', user.rotas);
+
+        if (!hasAccess) {
+            const res = NextResponse.next(); // não bloqueia em dev
+            res.headers.set('x-auth-debug', 'no_access');
+            return res;
+        }
+
+        // Injeta dados do usuário
+        const res = NextResponse.next();
+        res.headers.set(
+            'x-user-data',
+            JSON.stringify({
+                id: user.id,
+                nome: user.nome,
+                departamento: user.departamento,
+                cargo: user.cargo,
+                empresa: user.empresa,
+                permissoes: user.permissoes,
+                rotas: user.rotas,
+            }),
+        );
+        return res;
+    }
+
+    // 3) Produção (não-dev): fluxo normal com ?token e cookie
+
+    // 3.1) token via query (?token=...) → salva cookie e limpa a URL
+    const urlToken = request.nextUrl.searchParams.get('token');
+    if (urlToken) {
+        console.log('[MW] token via query encontrado (prod)');
+        const res = NextResponse.redirect(new URL(pathname, request.url));
+        res.cookies.set('token', urlToken, {
             httpOnly: true,
             secure: true,
             sameSite: 'lax',
             path: '/',
-            maxAge: 60 * 15,
         });
-
         return res;
     }
 
-    // Deixo que rotas públicas passem direto
-    if (isPublic(pathname)) {
-        return NextResponse.next();
+    // 3.2) precisa ter cookie em produção
+    const cookieToken = request.cookies.get('token')?.value;
+    if (!cookieToken) {
+        console.log('[MW] sem token (prod) → redirecionando para LOGIN_URL');
+        return NextResponse.redirect(
+            process.env.LOGIN_URL ?? 'https://constellation-api.grupomonaco.com.br/sismonaco/login',
+        );
     }
 
-    // Faço a leitura desse token em todas as outras rotas
-    const token = request.cookies.get('token')?.value;
-    if (!token) {
-        return NextResponse.redirect(new URL('/login', request.url));
+    // 3.3) valida usuário em produção
+    console.log('[MW] chamando /me... (prod)');
+    const user = await fetchUserData(cookieToken);
+    if (!user || user.ativo !== 'True') {
+        console.log('[MW] /me falhou OU usuário inativo (prod)');
+        return NextResponse.redirect(
+            process.env.LOGIN_URL ?? 'https://constellation-api.grupomonaco.com.br/sismonaco/login',
+        );
     }
 
-    // Chamo o /me pra validar a sessão
-    const userData = await fetchUserData(token);
-    if (!userData) {
-        return NextResponse.redirect(new URL('/login', request.url));
-    }
-
-    // Verificação para quando o usuário está inativo no constellation
-    const ativoStr = String(userData.ativo).toLowerCase();
-    const isActive =
-        ativoStr === 'true' || ativoStr === '1' || ativoStr === 'yes' || ativoStr === 'ativo';
-    if (!isActive) {
-        return NextResponse.redirect(new URL('/login', request.url));
-    }
-
-    // userData.rotas é a lista de rotas que esse usuário tem permissão de acessar
-    // Sendo assim fazemos uma verificação, caso o usuário tente acessar uma rota não permitida
-    const current = pathWithSlash(pathname);
-    const hasAccess = (userData.rotas || []).some((r) => current.startsWith(pathWithSlash(r)));
-    if (!hasAccess) {
-        return NextResponse.redirect(new URL('/acesso-negado', request.url));
-    }
-
-    // Propago esses headers apenas no SSR
-    const reqHeaders = new Headers(request.headers);
-    reqHeaders.set('authorization', `Bearer ${token}`);
-    reqHeaders.set('x-user-id', userData.id);
-    reqHeaders.set('x-user-roles', JSON.stringify(userData.permissoes || []));
-
-    return NextResponse.next({
-        request: { headers: reqHeaders },
+    // 3.4) autorização por prefixo
+    const hasAccess = (user.rotas || []).some((route) => {
+        if (!route) return false;
+        const normalized = route.endsWith('/') ? route : route + '/';
+        return pathname === route || pathname.startsWith(normalized);
     });
+    console.log('[MW] hasAccess:', hasAccess, 'rotas:', user.rotas);
+
+    if (!hasAccess) {
+        const denied = process.env.ACCESS_DENIED_URL ?? '/acesso-negado';
+        return NextResponse.redirect(new URL(denied, request.url));
+    }
+
+    // 3.5) injeta dados no header
+    const res = NextResponse.next();
+    res.headers.set(
+        'x-user-data',
+        JSON.stringify({
+            id: user.id,
+            nome: user.nome,
+            departamento: user.departamento,
+            cargo: user.cargo,
+            empresa: user.empresa,
+            permissoes: user.permissoes,
+            rotas: user.rotas,
+        }),
+    );
+    return res;
 }
 
 export const config = {
-    matcher: [
-        '/((?!_next/static|_next/image|favicon.ico|public/).*)',
-    ],
+    matcher: ['/((?!_next/static|_next/image|favicon.ico|public/).*)'],
 };
