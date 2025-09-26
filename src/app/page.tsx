@@ -1,4 +1,3 @@
-import DashboardPage from "@/app/dashboard/page";
 
 export default function Home() {
   return (
@@ -7,9 +6,6 @@ export default function Home() {
           Lorem ipsum dolor sit amet consectetur adipisicing elit. Aliquid mollitia maiores, aut quae laborum impedit
           pariatur reiciendis aliquam cupiditate laboriosam unde ipsum velit est beatae nisi? Dicta maxime expedita ducimus!
       </p>
-        <DashboardPage>
-
-        </DashboardPage>
     </div>
   );
 }

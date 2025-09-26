@@ -21,16 +21,16 @@ function SidebarContent() {
                     <CollapsibleTrigger asChild>
                         <button className="w-full flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent">
                             <LayersIcon className="h-4 w-4" />
-                            Torre de Controle
+                            Cadastro Base
                             <ChevronDownIcon className="ml-auto h-4 w-4 opacity-70" />
                         </button>
                     </CollapsibleTrigger>
                     <CollapsibleContent className="pl-8 mt-1 space-y-1">
                         <Link
-                            href="/torre/acompanhamento"
+                            href="/parameters"
                             className="block rounded-md px-3 py-2 text-sm bg-accent/60"
                         >
-                            Acompanhamento
+                            Grupos e Parâmetros
                         </Link>
                         {/* ...outros itens */}
                     </CollapsibleContent>

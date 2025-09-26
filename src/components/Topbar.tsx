@@ -28,7 +28,11 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
                 {/* logo */}
                 <div className="h-14 flex items-center px-4 border-b md:border-0">
                     <Link href="/" className="flex items-center gap-2 font-semibold">
-                        <Component1Icon className="h-5 w-5 font-black"/>
+                        <img
+                            src="/monaco.svg"
+                            alt="Logo SisMônaco"
+                            className="h-5 w-5"
+                        />
                         <span>SisMônaco</span>
                     </Link>
                 </div>
