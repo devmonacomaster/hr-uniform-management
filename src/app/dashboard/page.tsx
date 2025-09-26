@@ -1,4 +1,20 @@
+// src/app/dashboard/page.tsx
 import { cookies } from 'next/headers';
+import { headers as nextHeaders } from 'next/headers';
+
+// shadcn/ui
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import {
+    ExclamationTriangleIcon,
+    PersonIcon,
+    LockOpen1Icon,
+    FileTextIcon,
+} from '@radix-ui/react-icons';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,8 +38,7 @@ type ApiResponse = {
 };
 
 function isLocalhostEnv() {
-    const flag = (process.env.IS_LOCALHOST || '').toLowerCase() === 'true';
-    return flag;
+    return (process.env.IS_LOCALHOST || '').toLowerCase() === 'true';
 }
 
 async function fetchMe(): Promise<ApiResponse> {
@@ -42,9 +57,7 @@ async function fetchMe(): Promise<ApiResponse> {
         };
     }
 
-    const base =
-        process.env.NEXT_PUBLIC_API_BASE ??
-        'http://localhost/sismonaco';
+    const base = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost/sismonaco';
 
     const res = await fetch(`${base}/api/me`, {
         headers: {
@@ -67,149 +80,166 @@ async function fetchMe(): Promise<ApiResponse> {
 
 export default async function DashboardPage() {
     const data = await fetchMe();
+    const h = await nextHeaders();
+    const debug = h.get('x-auth-debug'); // opcional: mostra motivo quando middleware pula validação em dev
 
     if (data.error || !data.results) {
         return (
-            <main style={{ padding: 24, maxWidth: 960, margin: '0 auto' }}>
-                <h1 style={{ marginBottom: 12 }}>Dashboard</h1>
-                <div
-                    style={{
-                        padding: 16,
-                        border: '1px solid #e5e7eb',
-                        borderRadius: 8,
-                        background: '#fff7f7',
-                    }}
-                >
-                    <strong>Não foi possível carregar os dados do usuário.</strong>
-                    <p style={{ marginTop: 8 }}>
+            <main className="mx-auto max-w-5xl p-6">
+                <h1 className="mb-3 text-2xl font-semibold tracking-tight text-foreground">Dashboard</h1>
+
+                <Alert variant="destructive" className="mb-4">
+                    <ExclamationTriangleIcon className="h-4 w-4" />
+                    <AlertTitle>Não foi possível carregar os dados do usuário</AlertTitle>
+                    <AlertDescription>
                         {data.message || 'Tente novamente. Em produção, faça login no sistema externo.'}
+                    </AlertDescription>
+                </Alert>
+
+                {isLocalhostEnv() && (
+                    <p className="text-sm text-muted-foreground">
+                        Dica: em localhost, verifique <code>IS_LOCALHOST=true</code> e{' '}
+                        <code>DEV_BEARER_TOKEN</code> no <code>.env.local</code>.
+                        {debug ? (
+                            <>
+                                {' '}
+                                (<span className="font-mono">x-auth-debug: {debug}</span>)
+                            </>
+                        ) : null}
                     </p>
-                    {isLocalhostEnv() ? (
-                        <p style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
-                            Dica: em localhost, verifique se <code>IS_LOCALHOST=true</code> e{' '}
-                            <code>DEV_BEARER_TOKEN</code> estão definidos no <code>.env.local</code>.
-                        </p>
-                    ) : null}
-                </div>
+                )}
             </main>
         );
     }
 
     const u = data.results;
+    const ativo = String(u.ativo) === 'True';
+    const initials = u.nome
+        .split(' ')
+        .map((n) => n[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase();
 
     return (
-        <main style={{ padding: 24, maxWidth: 960, margin: '0 auto' }}>
-            <h1 style={{ marginBottom: 12 }}>Dashboard</h1>
+        <main className="mx-auto max-w-5xl p-6">
+            <div className="mb-4 flex items-center gap-2">
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground">Dashboard</h1>
+                {debug ? (
+                    <Badge variant="outline" className="font-mono">
+                        debug: {debug}
+                    </Badge>
+                ) : null}
+            </div>
 
-            <section
-                style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr',
-                    gap: 16,
-                }}
-            >
-                <div
-                    style={{
-                        padding: 16,
-                        border: '1px solid #e5e7eb',
-                        borderRadius: 8,
-                        background: '#ffffff',
-                    }}
-                >
-                    <h2 style={{ margin: '0 0 12px 0' }}>Perfil</h2>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                        <div>
-                            <div><strong>ID:</strong> {u.id}</div>
-                            <div><strong>Nome:</strong> {u.nome}</div>
-                            <div><strong>Email:</strong> {u.email}</div>
-                            <div><strong>Ativo:</strong> {u.ativo}</div>
-                        </div>
-                        <div>
-                            <div><strong>Departamento:</strong> {u.departamento}</div>
-                            <div><strong>Cargo:</strong> {u.cargo}</div>
-                            <div><strong>Empresa:</strong> {u.empresa}</div>
+            <section className="grid gap-4">
+                {/* Perfil */}
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                        <CardTitle className="flex items-center gap-2 text-base">
+                            <PersonIcon className="h-4 w-4" />
+                            Perfil
+                        </CardTitle>
+                        <Badge
+                            variant="outline"
+                            className={ativo ? 'border-green-500/30 text-green-600 dark:text-green-400' : ''}
+                        >
+                            {ativo ? 'Ativo' : 'Inativo'}
+                        </Badge>
+                    </CardHeader>
+                    <CardContent className="grid gap-4 sm:grid-cols-2">
+                        <div className="flex items-center gap-3">
+                            <Avatar>
+                                <AvatarImage src={u.avatar ?? undefined} alt={u.nome} />
+                                <AvatarFallback>{initials}</AvatarFallback>
+                            </Avatar>
                             <div>
-                                <strong>Avatar:</strong>{' '}
-                                {u.avatar ? (
-                                    <img
-                                        src={u.avatar}
-                                        alt="Avatar"
-                                        style={{ width: 40, height: 40, borderRadius: '50%', verticalAlign: 'middle' }}
-                                    />
-                                ) : (
-                                    '—'
-                                )}
+                                <div className="font-medium text-foreground">{u.nome}</div>
+                                <div className="text-sm text-muted-foreground">{u.email}</div>
                             </div>
                         </div>
-                    </div>
-                </div>
 
-                <div
-                    style={{
-                        padding: 16,
-                        border: '1px solid #e5e7eb',
-                        borderRadius: 8,
-                        background: '#ffffff',
-                    }}
-                >
-                    <h2 style={{ margin: '0 0 12px 0' }}>Permissões</h2>
-                    {u.permissoes?.length ? (
-                        <ul style={{ margin: 0, paddingLeft: 18 }}>
-                            {u.permissoes.map((p) => (
-                                <li key={p} style={{ marginBottom: 4 }}>
-                                    <code>{p}</code>
-                                </li>
-                            ))}
-                        </ul>
-                    ) : (
-                        <div>—</div>
-                    )}
-                </div>
+                        <div className="grid gap-2">
+                            <div className="text-sm">
+                                <span className="font-medium text-foreground">ID: </span>
+                                <span className="font-mono text-muted-foreground">{u.id}</span>
+                            </div>
+                            <div className="text-sm">
+                                <span className="font-medium text-foreground">Departamento: </span>
+                                <span className="text-muted-foreground">{u.departamento}</span>
+                            </div>
+                            <div className="text-sm">
+                                <span className="font-medium text-foreground">Cargo: </span>
+                                <span className="text-muted-foreground">{u.cargo}</span>
+                            </div>
+                            <div className="text-sm">
+                                <span className="font-medium text-foreground">Empresa: </span>
+                                <span className="text-muted-foreground">{u.empresa}</span>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
 
-                <div
-                    style={{
-                        padding: 16,
-                        border: '1px solid #e5e7eb',
-                        borderRadius: 8,
-                        background: '#ffffff',
-                    }}
-                >
-                    <h2 style={{ margin: '0 0 12px 0' }}>Rotas liberadas</h2>
-                    {u.rotas?.length ? (
-                        <ul style={{ margin: 0, paddingLeft: 18 }}>
-                            {u.rotas.map((r) => (
-                                <li key={r}>
-                                    <code>{r}</code>
-                                </li>
-                            ))}
-                        </ul>
-                    ) : (
-                        <div>—</div>
-                    )}
-                </div>
+                {/* Permissões */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                            <LockOpen1Icon className="h-4 w-4" />
+                            Permissões
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        {u.permissoes?.length ? (
+                            <ScrollArea className="h-56 rounded-md border">
+                                <ul className="divide-y">
+                                    {u.permissoes.map((p) => (
+                                        <li key={p} className="px-3 py-2">
+                                            <code className="text-xs">{p}</code>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </ScrollArea>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">—</p>
+                        )}
+                    </CardContent>
+                </Card>
 
-                <details
-                    style={{
-                        padding: 16,
-                        border: '1px solid #e5e7eb',
-                        borderRadius: 8,
-                        background: '#ffffff',
-                    }}
-                >
-                    <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Ver JSON completo</summary>
-                    <pre
-                        style={{
-                            marginTop: 12,
-                            padding: 12,
-                            borderRadius: 8,
-                            background: '#0b1020',
-                            color: '#d1e7ff',
-                            overflow: 'auto',
-                        }}
-                    >
-{JSON.stringify(data, null, 2)}
-          </pre>
-                </details>
+                {/* Rotas liberadas */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                            <FileTextIcon className="h-4 w-4" />
+                            Rotas liberadas
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        {u.rotas?.length ? (
+                            <div className="flex flex-wrap gap-2">
+                                {u.rotas.map((r) => (
+                                    <Badge key={r} variant="outline" className="font-mono">
+                                        {r}
+                                    </Badge>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">—</p>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* JSON completo (debug) */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="text-base">JSON completo</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <Separator className="mb-3" />
+                        <pre className="max-h-[420px] overflow-auto rounded-md border bg-muted p-3 text-xs text-muted-foreground">
+              {JSON.stringify(data, null, 2)}
+            </pre>
+                    </CardContent>
+                </Card>
             </section>
         </main>
     );

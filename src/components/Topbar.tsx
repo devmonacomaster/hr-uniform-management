@@ -18,7 +18,7 @@ import Link from "next/link";
 
 export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
     return (
-        <header className="fixed top-0 inset-x-0 z-50 h-14 border-b bg-background/80 backdrop-blur">
+        <header className="fixed top-0 inset-x-0 z-50 h-14 border-b bg-background/30 backdrop-blur">
             <div className="h-full flex items-center gap-3 px-4">
                 {/* hambúrguer mobile */}
                 <Button variant="ghost" size="icon" className="md:hidden" onClick={onOpenMenu} aria-label="Abrir menu">
